@@ -22,11 +22,14 @@ export const RoomSchema = z.strictObject({
   accessible: z.boolean(),
   roomPrice: z.number().int().min(1).max(999),
   features: z.array(z.string()),
-  description: z.string(),
-  image: z.string(),
+  // Optional: a room created without them is returned without these fields at all.
+  description: z.string().optional(),
+  image: z.string().optional(),
 });
 
 export const RoomListSchema = z.strictObject({ rooms: z.array(RoomSchema) });
+/** The list envelope only, for lists that may hold records the test does not control. */
+export const RoomListEnvelopeSchema = z.strictObject({ rooms: z.array(z.looseObject({})) });
 
 // ── Bookings ─────────────────────────────────────────────────────────────────────────────
 

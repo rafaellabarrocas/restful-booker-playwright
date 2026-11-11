@@ -1,7 +1,8 @@
 import {
   ROOM_TYPES,
-  RoomListSchema,
+  RoomListEnvelopeSchema,
   RoomSchema,
+  type Room,
   SuccessSchema,
   ValidationErrorsSchema,
 } from "../../src/api/schemas";
@@ -43,9 +44,13 @@ test.describe("API · Rooms", () => {
       const response = await anonApi.rooms.list();
 
       await expect(response).toBeJson(200);
-      const body = await response.json();
-      await expect(response).toMatchSchema(RoomListSchema);
-      expect(body.rooms).toContainEqual(room);
+      // The list also holds other people's rooms on a shared environment: the contract is
+      // checked on the envelope and on this test's own room, which it fully controls.
+      await expect(response).toMatchSchema(RoomListEnvelopeSchema);
+      const rooms: Room[] = (await response.json()).rooms;
+      const listed = rooms.find((r) => r.roomid === room.roomid);
+      await expect(listed).toMatchSchema(RoomSchema);
+      expect(listed).toEqual(room);
     });
 
     test(
@@ -109,6 +114,32 @@ test.describe("API · Rooms", () => {
 
       expect(await data.findRoom(room.roomName)).toMatchObject({ features: [], accessible: false });
     });
+
+    test(
+      "creates a room from the required fields only",
+      {
+        tag: "@defect",
+        annotation: { type: "defect", description: "Omitting features stores [null], not []" },
+      },
+      async ({ adminApi }) => {
+        const { roomName, type, accessible, roomPrice } = data.room();
+
+        await expect(
+          await adminApi.rooms.create({ roomName, type, accessible, roomPrice }),
+        ).toBeJson(200);
+
+        const created = await data.findRoom(roomName);
+        await expect(created).toMatchSchema(RoomSchema);
+        expect(created).toEqual({
+          roomid: expect.any(Number),
+          roomName,
+          type,
+          accessible,
+          roomPrice,
+          features: [],
+        });
+      },
+    );
 
     test("creates a room with every feature", async ({ adminApi }) => {
       const features = ["WiFi", "TV", "Radio", "Refreshments", "Safe", "Views"];

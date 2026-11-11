@@ -13,12 +13,10 @@
  * annotation in the report and printed, so leftovers on a shared environment stay visible.
  */
 import { expect, type APIResponse, type TestInfo } from "@playwright/test";
+import { z } from "zod";
 import type { Api } from "../api/clients";
 import {
   BookingSchema,
-  MessageListSchema,
-  RoomListSchema,
-  BookingListSchema,
   type Booking,
   type BookingInput,
   type MessageInput,
@@ -27,6 +25,16 @@ import {
   type RoomInput,
 } from "../api/schemas";
 import { buildBooking, buildMessage, buildRoom } from "./factories";
+
+/*
+ * Lookups are deliberately tolerant: on a shared environment the lists also hold other
+ * people's records (and records left by past defects), and one malformed foreign record
+ * must not break this test's setup or cleanup. Each lookup only needs the envelope and
+ * the identifying fields; strict contract checks belong in the tests, on their own data.
+ */
+const RoomRefs = z.object({ rooms: z.array(z.looseObject({})) });
+const MessageRefs = z.object({ messages: z.array(z.looseObject({})) });
+const BookingRefs = z.object({ bookings: z.array(z.looseObject({})) });
 
 function uniqueTag(): string {
   return `qa${Math.random().toString(36).slice(2, 7)}`;
@@ -96,23 +104,23 @@ export class TestData {
   // ── Lookups ───────────────────────────────────────────────────────────────────────────
 
   async findRoom(roomName: string): Promise<Room | undefined> {
-    const { rooms } = RoomListSchema.parse(await (await this.admin.rooms.list()).json());
-    return rooms.find((room) => room.roomName === roomName);
+    const { rooms } = RoomRefs.parse(await (await this.admin.rooms.list()).json());
+    return rooms.find((room) => room.roomName === roomName) as Room | undefined;
   }
 
   async findMessage(subject: string): Promise<MessageSummary | undefined> {
-    const { messages } = MessageListSchema.parse(await (await this.admin.messages.list()).json());
-    return messages.find((message) => message.subject === subject);
+    const { messages } = MessageRefs.parse(await (await this.admin.messages.list()).json());
+    return messages.find((message) => message.subject === subject) as MessageSummary | undefined;
   }
 
   async findMessageFrom(senderName: string): Promise<MessageSummary | undefined> {
-    const { messages } = MessageListSchema.parse(await (await this.admin.messages.list()).json());
-    return messages.find((message) => message.name === senderName);
+    const { messages } = MessageRefs.parse(await (await this.admin.messages.list()).json());
+    return messages.find((message) => message.name === senderName) as MessageSummary | undefined;
   }
 
   async bookingsForRoom(roomid: number): Promise<Booking[]> {
     const response = await this.admin.bookings.listForRoom(roomid);
-    return BookingListSchema.parse(await response.json()).bookings;
+    return BookingRefs.parse(await response.json()).bookings as Booking[];
   }
 
   // ── Cleanup ───────────────────────────────────────────────────────────────────────────
@@ -127,8 +135,8 @@ export class TestData {
       if (!response.ok()) failures.push(`${resource} → HTTP ${response.status()}`);
     };
 
-    const { rooms } = RoomListSchema.parse(await (await this.admin.rooms.list()).json());
-    for (const room of rooms.filter((r) => r.roomName.includes(this.tag))) {
+    const rooms = RoomRefs.parse(await (await this.admin.rooms.list()).json()).rooms as Room[];
+    for (const room of rooms.filter((r) => String(r.roomName).includes(this.tag))) {
       for (const booking of await this.bookingsForRoom(room.roomid)) {
         await remove(`booking ${booking.bookingid}`, this.admin.bookings.delete(booking.bookingid));
       }
@@ -139,7 +147,8 @@ export class TestData {
       await remove(`booking ${bookingid}`, this.admin.bookings.delete(bookingid));
     }
 
-    const { messages } = MessageListSchema.parse(await (await this.admin.messages.list()).json());
+    const messages = MessageRefs.parse(await (await this.admin.messages.list()).json())
+      .messages as MessageSummary[];
     for (const message of messages.filter((m) => `${m.name} ${m.subject}`.includes(this.tag))) {
       await remove(
         `message ${message.id} "${message.subject}"`,
