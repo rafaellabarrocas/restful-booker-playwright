@@ -6,16 +6,15 @@ type NewRoom = Pick<RoomInput, "roomName" | "type" | "accessible" | "roomPrice" 
 /** Admin room management at /admin/rooms: the room list and the "create room" row. */
 export class AdminRoomsPage {
   readonly logoutButton: Locator;
-  readonly formError: Locator;
+  readonly createButton: Locator;
+  readonly formErrors: Locator;
   private readonly roomNameInput: Locator;
   private readonly typeSelect: Locator;
   private readonly accessibleSelect: Locator;
   private readonly priceInput: Locator;
-  private readonly createButton: Locator;
 
   constructor(private readonly page: Page) {
     this.logoutButton = page.getByRole("button", { name: "Logout" });
-    this.formError = page.getByRole("alert").filter({ hasText: /\S/ });
     // The create-room inputs have no labels (an accessibility defect), so they are found
     // by the options they offer, or by their test id when they have nothing else.
     this.roomNameInput = page.getByTestId("roomName");
@@ -29,18 +28,24 @@ export class AdminRoomsPage {
     // lootfilter-disable-next-line LOC-001
     this.priceInput = page.locator("#roomPrice");
     this.createButton = page.getByRole("button", { name: "Create" });
+    // The error box has no role, label or test id (its role="alert" sibling stays empty).
+    // lootfilter-disable-next-line LOC-001
+    this.formErrors = page.locator(".alert-danger");
   }
 
   async open(): Promise<void> {
     await this.page.goto("/admin/rooms");
   }
 
-  async createRoom(room: NewRoom): Promise<void> {
-    await this.roomNameInput.fill(room.roomName);
-    await this.typeSelect.selectOption(room.type);
-    await this.accessibleSelect.selectOption(String(room.accessible));
-    await this.priceInput.fill(String(room.roomPrice));
-    for (const feature of room.features) await this.featureCheckbox(feature).check();
+  /** Fills the fields given (others keep the form's defaults) and submits. */
+  async createRoom(room: Partial<NewRoom>): Promise<void> {
+    if (room.roomName !== undefined) await this.roomNameInput.fill(room.roomName);
+    if (room.type !== undefined) await this.typeSelect.selectOption(room.type);
+    if (room.accessible !== undefined) {
+      await this.accessibleSelect.selectOption(String(room.accessible));
+    }
+    if (room.roomPrice !== undefined) await this.priceInput.fill(String(room.roomPrice));
+    for (const feature of room.features ?? []) await this.featureCheckbox(feature).check();
     await this.createButton.click();
   }
 
