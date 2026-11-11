@@ -5,15 +5,15 @@ a demo hotel booking site. Written in Cypress + TypeScript.
 
 ## Running the tests
 
-Requirements: Node.js 20+.
+Requirements: Node.js 20.12+.
 
 ```bash
 npm ci
 
-# Admin credentials are read from the environment, never from a file in the repo.
-# Use the demo credentials given in the exercise brief.
-export ADMIN_USERNAME=...
-export ADMIN_PASSWORD=...
+# Admin credentials come from the environment, never from a committed file.
+# Copy the template and fill in the demo credentials from the exercise brief.
+# (.env is gitignored; exported shell variables work too.)
+cp .env.example .env
 
 npm test              # whole suite, headless
 npm run test:smoke    # only the @smoke tests (the PR gate)
@@ -80,7 +80,7 @@ collected and printed at the end of the run so leftovers are visible.
 
 - Admin UI tests log in through the API (`cy.session`); only the login spec drives the login form.
 - Credentials are read with `cy.env()` from environment variables (`ADMIN_USERNAME`, `ADMIN_PASSWORD`),
-  never committed. In CI they come from repository secrets.
+  loaded from a gitignored `.env` locally and never committed. In CI they come from repository secrets.
 - No fixed waits: everything relies on Cypress retry-ability and assertions.
 - Only one uncaught application error is ignored: React hydration error #418, which the live site
   throws on every page load (see findings). Any other uncaught error still fails the test.

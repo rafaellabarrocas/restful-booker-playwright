@@ -1,6 +1,10 @@
 import { defineConfig } from "cypress";
 import { plugin as cypressGrepPlugin } from "@cypress/grep/plugin";
 import { registerCleanupReport } from "./cypress/plugins/cleanupReport";
+import { existsSync } from "node:fs";
+
+// Local runs read credentials from a gitignored .env; CI provides them as secrets.
+if (existsSync(".env")) process.loadEnvFile(".env");
 
 export default defineConfig({
   e2e: {
