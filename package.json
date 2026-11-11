@@ -6,12 +6,14 @@
   "scripts": {
     "cy:open": "cypress open",
     "test": "cypress run",
-    "test:smoke": "cypress run --env grepTags=@smoke,grepFilterSpecs=true",
-    "test:api": "cypress run --spec 'cypress/e2e/api/**/*.cy.ts'",
-    "test:ui": "cypress run --spec 'cypress/e2e/ui/**/*.cy.ts'",
+    "test:smoke": "cypress run --expose grepTags=@smoke,grepFilterSpecs=true",
+    "test:api": "cypress run --spec \"cypress/e2e/api/**/*.cy.ts\"",
+    "test:ui": "cypress run --spec \"cypress/e2e/ui/**/*.cy.ts\"",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run format:check && npm run lint && npm run typecheck"
   },
   "devDependencies": {
     "@cypress/grep": "^7.0.0",
