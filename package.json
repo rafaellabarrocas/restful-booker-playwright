@@ -1,0 +1,16 @@
+{
+  "name": "restful-booker-cypress",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Automated test suite for Restful Booker Platform (automationintesting.online)",
+  "scripts": {
+    "cy:open": "cypress open",
+    "test": "cypress run",
+    "test:smoke": "cypress run --env grepTags=@smoke,grepFilterSpecs=true",
+    "test:api": "cypress run --spec 'cypress/e2e/api/**/*.cy.ts'",
+    "test:ui": "cypress run --spec 'cypress/e2e/ui/**/*.cy.ts'",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
+  }
+}
