@@ -32,6 +32,8 @@ export default tseslint.config(
       "playwright/no-focused-test": "error",
       "playwright/no-skipped-test": "error",
       "playwright/expect-expect": ["error", { assertFunctionNames: ["expect"] }],
+      // Playwright hooks receive fixtures first: `async ({}, testInfo) => …` is idiomatic.
+      "no-empty-pattern": ["error", { allowObjectPatternsAsParameters: true }],
     },
   },
 

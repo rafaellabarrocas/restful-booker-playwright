@@ -8,10 +8,14 @@
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import type { BookingDates, BookingInput, MessageInput, RoomInput } from "./schemas";
 
-/** A JSON body, or a raw string to send malformed payloads. */
+/** A JSON body, or a raw string sent byte-for-byte (to send malformed payloads). */
 type Body = object | string;
 
-const json = (data: Body) => ({ data, headers: { "Content-Type": "application/json" } });
+const json = (data: Body) => ({
+  // Playwright would JSON-encode a string into a valid JSON string literal: send raw bytes.
+  data: typeof data === "string" ? Buffer.from(data) : data,
+  headers: { "Content-Type": "application/json" },
+});
 
 export class AuthClient {
   constructor(private readonly request: APIRequestContext) {}

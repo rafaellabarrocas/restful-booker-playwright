@@ -1,10 +1,15 @@
 /**
  * API assertions that report clearly when they fail:
  *   await expect(response).toBeJson(201)      status + JSON content type, with the body on failure
- *   expect(body).toMatchSchema(RoomSchema)    every schema violation, with its path
+ *   await expect(response).toMatchSchema(S)  JSON body against a zod schema: every violation, with its path
+ *   await expect(room).toMatchSchema(S)      same, on an already parsed value
  */
 import { expect as baseExpect, type APIResponse } from "@playwright/test";
 import type { ZodType } from "zod";
+
+function isApiResponse(value: unknown): value is APIResponse {
+  return typeof (value as APIResponse | undefined)?.json === "function";
+}
 
 export const expect = baseExpect.extend({
   async toBeJson(response: APIResponse, expectedStatus: number) {
@@ -24,8 +29,10 @@ export const expect = baseExpect.extend({
     };
   },
 
-  toMatchSchema(received: unknown, schema: ZodType) {
-    const result = schema.safeParse(received);
+  /** Works on a value, or on an APIResponse (its JSON body is checked). */
+  async toMatchSchema(received: APIResponse | object | undefined, schema: ZodType) {
+    const value = isApiResponse(received) ? await received.json() : received;
+    const result = schema.safeParse(value);
     const issues = result.success
       ? ""
       : result.error.issues
@@ -38,7 +45,7 @@ export const expect = baseExpect.extend({
       message: () =>
         this.isNot
           ? "Expected the value not to match the schema"
-          : `Value does not match the schema:\n${issues}\n\nReceived: ${this.utils.printReceived(received)}`,
+          : `Value does not match the schema:\n${issues}\n\nReceived: ${this.utils.printReceived(value)}`,
     };
   },
 });

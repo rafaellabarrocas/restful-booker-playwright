@@ -25,7 +25,8 @@ export class AdminRoomsPage {
     this.accessibleSelect = page
       .getByRole("combobox")
       .filter({ has: page.getByRole("option", { name: "true", exact: true }) });
-    // lootfilter-disable-next-line LOC-001 -- unlabelled input with no role name or test id
+    // Unlabelled input with no accessible name and no test id: CSS is the only handle.
+    // lootfilter-disable-next-line LOC-001
     this.priceInput = page.locator("#roomPrice");
     this.createButton = page.getByRole("button", { name: "Create" });
   }

@@ -12,7 +12,7 @@
  * A failed delete never fails or hides a test result. It is recorded as a "cleanup-failed"
  * annotation in the report and printed, so leftovers on a shared environment stay visible.
  */
-import { expect, type TestInfo } from "@playwright/test";
+import { expect, type APIResponse, type TestInfo } from "@playwright/test";
 import type { Api } from "../api/clients";
 import {
   BookingSchema,
@@ -84,9 +84,13 @@ export class TestData {
     return created as MessageSummary;
   }
 
-  /** For bookings that cannot be found through a tagged room (e.g. on a room that does not exist). */
-  trackBooking(bookingid: number): void {
-    this.orphanBookingIds.add(bookingid);
+  /**
+   * Registers a booking the API created where cleanup cannot find it through a tagged room
+   * (e.g. a booking accepted for a room that does not exist). No-op if nothing was created.
+   */
+  async trackBookingIfCreated(response: APIResponse): Promise<void> {
+    const created = BookingSchema.safeParse(await response.json().catch(() => null));
+    if (created.success) this.orphanBookingIds.add(created.data.bookingid);
   }
 
   // ── Lookups ───────────────────────────────────────────────────────────────────────────
@@ -99,6 +103,11 @@ export class TestData {
   async findMessage(subject: string): Promise<MessageSummary | undefined> {
     const { messages } = MessageListSchema.parse(await (await this.admin.messages.list()).json());
     return messages.find((message) => message.subject === subject);
+  }
+
+  async findMessageFrom(senderName: string): Promise<MessageSummary | undefined> {
+    const { messages } = MessageListSchema.parse(await (await this.admin.messages.list()).json());
+    return messages.find((message) => message.name === senderName);
   }
 
   async bookingsForRoom(roomid: number): Promise<Booking[]> {
