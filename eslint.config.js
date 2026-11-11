@@ -1,10 +1,10 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
-import pluginCypress from "eslint-plugin-cypress";
+import playwright from "eslint-plugin-playwright";
 import prettier from "eslint-config-prettier";
 
 export default tseslint.config(
-  { ignores: ["node_modules/", "cypress/screenshots/", "cypress/videos/"] },
+  { ignores: ["node_modules/", "playwright-report/", "test-results/", ".auth/"] },
 
   js.configs.recommended,
 
@@ -12,25 +12,26 @@ export default tseslint.config(
     files: ["**/*.ts"],
     extends: [...tseslint.configs.recommended],
     rules: {
-      "no-console": "warn",
+      "no-console": ["warn", { allow: ["warn"] }],
       "@typescript-eslint/no-unused-vars": [
         "warn",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "@typescript-eslint/no-explicit-any": "error",
-      "@typescript-eslint/no-namespace": "off",
+      "@typescript-eslint/no-floating-promises": "error",
     },
+    languageOptions: { parserOptions: { projectService: true } },
   },
 
   {
-    files: ["cypress/**/*.ts"],
-    extends: [pluginCypress.configs.recommended],
+    files: ["tests/**/*.ts"],
+    extends: [playwright.configs["flat/recommended"]],
     rules: {
-      "cypress/no-unnecessary-waiting": "error",
-      "cypress/no-async-tests": "error",
-      "cypress/no-pause": "error",
-      "cypress/no-force": "error",
-      "cypress/assertion-before-screenshot": "warn",
+      "playwright/no-wait-for-timeout": "error",
+      "playwright/no-force-option": "error",
+      "playwright/no-focused-test": "error",
+      "playwright/no-skipped-test": "error",
+      "playwright/expect-expect": ["error", { assertFunctionNames: ["expect"] }],
     },
   },
 

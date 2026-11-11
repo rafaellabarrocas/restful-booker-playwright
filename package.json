@@ -2,13 +2,15 @@
   "name": "restful-booker-cypress",
   "version": "0.1.0",
   "private": true,
-  "description": "Automated test suite for Restful Booker Platform (automationintesting.online)",
+  "description": "Playwright test suite (API + UI) for Restful Booker Platform",
   "scripts": {
-    "cy:open": "cypress open",
-    "test": "cypress run",
-    "test:smoke": "cypress run --expose grepTags=@smoke,grepFilterSpecs=true",
-    "test:api": "cypress run --spec \"cypress/e2e/api/**/*.cy.ts\"",
-    "test:ui": "cypress run --spec \"cypress/e2e/ui/**/*.cy.ts\"",
+    "test": "playwright test",
+    "test:api": "playwright test --project=api",
+    "test:ui": "playwright test --project=ui",
+    "test:smoke": "playwright test --grep @smoke",
+    "test:regression": "playwright test --grep-invert @defect",
+    "test:defects": "playwright test --grep @defect",
+    "report": "playwright show-report",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
@@ -16,17 +18,17 @@
     "check": "npm run format:check && npm run lint && npm run typecheck"
   },
   "devDependencies": {
-    "@cypress/grep": "^7.0.0",
     "@eslint/js": "^10.0.1",
     "@faker-js/faker": "^10.6.0",
+    "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
-    "cypress": "^16.3.0",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-cypress": "^7.0.4",
+    "eslint-plugin-playwright": "^2.12.2",
     "prettier": "^3.10.0",
     "typescript": "~5.9",
-    "typescript-eslint": "^8.72.2"
+    "typescript-eslint": "^8.72.2",
+    "zod": "^4.6.7"
   },
   "type": "module",
   "engines": {

@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": ["cypress", "node", "@cypress/grep"]
+    "types": ["node"]
   },
-  "include": ["cypress.config.ts", "cypress/**/*.ts"]
+  "include": ["playwright.config.ts", "src/**/*.ts", "tests/**/*.ts"]
 }
