@@ -5,7 +5,7 @@ import {
   ValidationErrorsSchema,
   type Room,
 } from "../../src/api/schemas";
-import { LIMITS, isoDate, phoneOfLength, stay, textOfLength } from "../../src/data/factories";
+import { LIMITS, phoneOfLength, stay, textOfLength } from "../../src/data/factories";
 import { TestData } from "../../src/data/test-data";
 import { expect, test } from "../../src/fixtures";
 
@@ -31,7 +31,7 @@ test.describe("API · Bookings", () => {
       "books an available room and echoes the booking",
       { tag: "@smoke" },
       async ({ anonApi }) => {
-        const booking = data.booking(room.roomid, { bookingdates: stay(40, 3) });
+        const booking = data.booking(room.roomid, { bookingdates: data.stay(40, 3) });
 
         const response = await anonApi.bookings.create(booking);
 
@@ -92,7 +92,7 @@ test.describe("API · Bookings", () => {
         annotation: { type: "defect", description: "DELETE /booking/:id → HTTP 500" },
       },
       async ({ adminApi, anonApi }) => {
-        const dates = stay(45);
+        const dates = data.stay(45);
         const booking = await data.createBooking(room.roomid, { bookingdates: dates });
 
         expect((await adminApi.bookings.delete(booking.bookingid)).ok()).toBe(true);
@@ -116,12 +116,12 @@ test.describe("API · Bookings", () => {
 
     test("accepts back-to-back stays (checkout day = next checkin day)", async ({ anonApi }) => {
       await data.createBooking(room.roomid, {
-        bookingdates: { checkin: isoDate(60), checkout: isoDate(62) },
+        bookingdates: { checkin: data.date(60), checkout: data.date(62) },
       });
 
       const response = await anonApi.bookings.create(
         data.booking(room.roomid, {
-          bookingdates: { checkin: isoDate(62), checkout: isoDate(64) },
+          bookingdates: { checkin: data.date(62), checkout: data.date(64) },
         }),
       );
 
@@ -131,7 +131,7 @@ test.describe("API · Bookings", () => {
 
     test("accepts the same dates on a different room", async ({ anonApi }) => {
       const otherRoom = await data.createRoom({ roomName: `${data.tag}-other` });
-      const dates = stay(70);
+      const dates = data.stay(70);
       await data.createBooking(room.roomid, { bookingdates: dates });
 
       const response = await anonApi.bookings.create(
@@ -143,21 +143,23 @@ test.describe("API · Bookings", () => {
   });
 
   test.describe("negative", () => {
-    const existing = { checkin: isoDate(80), checkout: isoDate(84) };
+    // The existing stay runs from day 10 to day 14 of the scope's window.
     const overlaps = [
-      { name: "the same dates", dates: existing },
-      { name: "a stay starting inside it", dates: { checkin: isoDate(82), checkout: isoDate(86) } },
-      { name: "a stay ending inside it", dates: { checkin: isoDate(78), checkout: isoDate(81) } },
-      { name: "a stay enclosing it", dates: { checkin: isoDate(79), checkout: isoDate(85) } },
-      { name: "a stay inside it", dates: { checkin: isoDate(81), checkout: isoDate(83) } },
+      { name: "the same dates", from: 10, to: 14 },
+      { name: "a stay starting inside it", from: 12, to: 16 },
+      { name: "a stay ending inside it", from: 8, to: 11 },
+      { name: "a stay enclosing it", from: 9, to: 15 },
+      { name: "a stay inside it", from: 11, to: 13 },
     ];
 
-    for (const { name, dates } of overlaps) {
+    for (const { name, from, to } of overlaps) {
       test(`refuses to double-book: ${name}`, { tag: "@smoke" }, async ({ anonApi }) => {
-        await data.createBooking(room.roomid, { bookingdates: existing });
+        await data.createBooking(room.roomid, { bookingdates: data.stay(10, 4) });
 
         const response = await anonApi.bookings.create(
-          data.booking(room.roomid, { bookingdates: dates }),
+          data.booking(room.roomid, {
+            bookingdates: { checkin: data.date(from), checkout: data.date(to) },
+          }),
         );
 
         await expect(response).toBeJson(409);
@@ -167,7 +169,7 @@ test.describe("API · Bookings", () => {
     }
 
     test("refuses a stay whose checkout is before its checkin", async ({ anonApi }) => {
-      const { checkin, checkout } = stay(90, 3);
+      const { checkin, checkout } = data.stay(90, 3);
 
       const response = await anonApi.bookings.create(
         data.booking(room.roomid, { bookingdates: { checkin: checkout, checkout: checkin } }),
@@ -180,7 +182,7 @@ test.describe("API · Bookings", () => {
     });
 
     test("refuses a zero-night stay (checkin = checkout)", async ({ anonApi }) => {
-      const day = isoDate(95);
+      const day = data.date(95);
 
       const response = await anonApi.bookings.create(
         data.booking(room.roomid, { bookingdates: { checkin: day, checkout: day } }),
@@ -305,14 +307,14 @@ test.describe("API · Bookings", () => {
 
     test("accepts a one-night stay", async ({ anonApi }) => {
       const response = await anonApi.bookings.create(
-        data.booking(room.roomid, { bookingdates: stay(100, 1) }),
+        data.booking(room.roomid, { bookingdates: data.stay(100, 1) }),
       );
 
       await expect(response).toBeJson(201);
     });
 
     test("accepts a stay ending on a leap day", async ({ anonApi }) => {
-      const bookingdates = { checkin: "2028-02-28", checkout: "2028-02-29" };
+      const bookingdates = data.leapDayStay();
 
       const response = await anonApi.bookings.create(data.booking(room.roomid, { bookingdates }));
 
@@ -324,13 +326,13 @@ test.describe("API · Bookings", () => {
   test.describe("corner cases", () => {
     test("keeps accents and non-Latin characters in guest names", async ({ anonApi }) => {
       const response = await anonApi.bookings.create(
-        data.booking(room.roomid, { firstname: "Zoë-Ñandú", lastname: "Øster-東京" }),
+        data.booking(room.roomid, { firstname: "Zoë-Ñandú", lastname: `${data.tag}-Øster-東京` }),
       );
 
       await expect(response).toBeJson(201);
       expect(await response.json()).toMatchObject({
         firstname: "Zoë-Ñandú",
-        lastname: "Øster-東京",
+        lastname: `${data.tag}-Øster-東京`,
       });
     });
 

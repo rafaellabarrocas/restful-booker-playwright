@@ -1,5 +1,4 @@
 import { RoomListEnvelopeSchema, type Booking, type Room } from "../../src/api/schemas";
-import { isoDate } from "../../src/data/factories";
 import { TestData } from "../../src/data/test-data";
 import { expect, test } from "../../src/fixtures";
 
@@ -17,7 +16,7 @@ test.describe("API · Room availability", () => {
     data = new TestData(adminApi);
     room = await data.createRoom();
     booking = await data.createBooking(room.roomid, {
-      bookingdates: { checkin: isoDate(200), checkout: isoDate(204) },
+      bookingdates: { checkin: data.date(200), checkout: data.date(204) },
     });
   });
 
@@ -27,7 +26,10 @@ test.describe("API · Room availability", () => {
 
   test.describe("happy path", () => {
     test("offers the room for dates when it is free", { tag: "@smoke" }, async ({ anonApi }) => {
-      const response = await anonApi.rooms.list({ checkin: isoDate(220), checkout: isoDate(222) });
+      const response = await anonApi.rooms.list({
+        checkin: data.date(220),
+        checkout: data.date(222),
+      });
 
       await expect(response).toBeJson(200);
       await expect(response).toMatchSchema(RoomListEnvelopeSchema);
@@ -90,8 +92,8 @@ test.describe("API · Room availability", () => {
         details,
         async ({ anonApi }) => {
           const response = await anonApi.rooms.list({
-            checkin: isoDate(from),
-            checkout: isoDate(to),
+            checkin: data.date(from),
+            checkout: data.date(to),
           });
 
           await expect(response).toBeJson(200);
@@ -121,7 +123,7 @@ test.describe("API · Room availability", () => {
       async ({ anonApi }) => {
         const response = await anonApi.rooms.list({
           checkin: "not-a-date",
-          checkout: isoDate(210),
+          checkout: data.date(210),
         });
 
         expect(response.status()).toBe(400);

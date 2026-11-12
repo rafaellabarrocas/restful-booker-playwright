@@ -1,5 +1,4 @@
 import type { Room } from "../../src/api/schemas";
-import { stay } from "../../src/data/factories";
 import { TestData } from "../../src/data/test-data";
 import { expect, test } from "../../src/fixtures";
 
@@ -46,7 +45,7 @@ test.describe("UI · Guest booking", () => {
         },
       },
       async ({ reservationPage }) => {
-        const booking = data.booking(room.roomid, { bookingdates: stay(45, 2) });
+        const booking = data.booking(room.roomid, { bookingdates: data.stay(45, 2) });
 
         await reservationPage.open(room.roomid, booking.bookingdates);
         await reservationPage.reserve(booking);

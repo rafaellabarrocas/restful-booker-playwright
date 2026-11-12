@@ -18,13 +18,14 @@ import type { Api } from "../api/clients";
 import {
   BookingSchema,
   type Booking,
+  type BookingDates,
   type BookingInput,
   type MessageInput,
   type MessageSummary,
   type Room,
   type RoomInput,
 } from "../api/schemas";
-import { buildBooking, buildMessage, buildRoom } from "./factories";
+import { buildBooking, buildMessage, buildRoom, isoDate } from "./factories";
 
 /*
  * Lookups are deliberately tolerant: on a shared environment the lists also hold other
@@ -42,6 +43,12 @@ function uniqueTag(): string {
 
 export class TestData {
   readonly tag = uniqueTag();
+  /**
+   * Each scope books inside its own random window, 1 to 10 years ahead. A room id can be
+   * recycled on the demo while bookings made for the old room survive, so scopes that all
+   * used the same fixed dates would collide with those leftover bookings.
+   */
+  private readonly dayOffset = 365 + Math.floor(Math.random() * 3285);
   private readonly orphanBookingIds = new Set<number>();
 
   constructor(private readonly admin: Api) {}
@@ -53,7 +60,25 @@ export class TestData {
   }
 
   booking(roomid: number, overrides: Partial<BookingInput> = {}): BookingInput {
-    return buildBooking(this.tag, roomid, overrides);
+    return buildBooking(this.tag, roomid, { bookingdates: this.stay(0), ...overrides });
+  }
+
+  // ── Dates inside this scope's window ──────────────────────────────────────────────────
+
+  /** A date `days` days into this scope's window. */
+  date(days: number): string {
+    return isoDate(this.dayOffset + days);
+  }
+
+  /** A stay of `nights` nights starting `days` days into this scope's window. */
+  stay(days: number, nights = 2): BookingDates {
+    return { checkin: this.date(days), checkout: this.date(days + nights) };
+  }
+
+  /** A one-night stay ending on 29 February of a future leap year. */
+  leapDayStay(): BookingDates {
+    const year = 2032 + 4 * Math.floor(Math.random() * 10);
+    return { checkin: `${year}-02-28`, checkout: `${year}-02-29` };
   }
 
   message(overrides: Partial<MessageInput> = {}): MessageInput {
@@ -118,9 +143,15 @@ export class TestData {
     return messages.find((message) => message.name === senderName) as MessageSummary | undefined;
   }
 
+  /**
+   * This scope's bookings on a room. Filtered by tag because a room id is not a stable
+   * identity on the demo: its services reset independently, so a recycled room id can
+   * still carry bookings made for an earlier, deleted room.
+   */
   async bookingsForRoom(roomid: number): Promise<Booking[]> {
     const response = await this.admin.bookings.listForRoom(roomid);
-    return BookingRefs.parse(await response.json()).bookings as Booking[];
+    const bookings = BookingRefs.parse(await response.json()).bookings as Booking[];
+    return bookings.filter((b) => `${b.firstname} ${b.lastname}`.includes(this.tag));
   }
 
   // ── Cleanup ───────────────────────────────────────────────────────────────────────────

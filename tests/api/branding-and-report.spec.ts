@@ -1,5 +1,4 @@
 import { BrandingSchema, ReportSchema, type Booking, type Room } from "../../src/api/schemas";
-import { stay } from "../../src/data/factories";
 import { TestData } from "../../src/data/test-data";
 import { expect, test } from "../../src/fixtures";
 
@@ -38,7 +37,7 @@ test.describe("API · Booking report", () => {
   test.beforeAll(async ({ adminApi }) => {
     data = new TestData(adminApi);
     room = await data.createRoom();
-    booking = await data.createBooking(room.roomid, { bookingdates: stay(120, 3) });
+    booking = await data.createBooking(room.roomid, { bookingdates: data.stay(120, 3) });
   });
 
   test.afterAll(async ({}, testInfo) => {

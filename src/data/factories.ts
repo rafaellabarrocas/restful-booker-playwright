@@ -61,7 +61,8 @@ export function buildBooking(
   return {
     roomid,
     firstname: tag,
-    lastname: faker.person.lastName().padEnd(LIMITS.lastname.min, "x"),
+    // The tag is in both names, so a test that overrides one still owns the booking.
+    lastname: `${tag}-${faker.person.lastName()}`.slice(0, LIMITS.lastname.max),
     depositpaid: false,
     email: faker.internet.email({ provider: "example.com" }),
     phone: phoneOfLength(),

@@ -123,6 +123,10 @@ resettable environment this means:
 **Cleanup never hides a result.** A failed delete doesn't fail the test. It is recorded as a
 `cleanup-failed` annotation in the report and printed as a warning.
 
+**Room ids are not trusted as identity.** The demo's services reset independently: room ids get
+recycled while bookings made for the old room survive. So each data scope books inside its own random
+date window (1–10 years ahead), and booking lookups return only the bookings carrying the scope's tag.
+
 **Lookups are tolerant, assertions are strict.** Setup and cleanup only read the identifying fields
 of the shared lists, so one malformed record left by someone else can't break them. Strict contract
 checks run on the test's own data.
@@ -159,8 +163,11 @@ Reports, traces and videos are uploaded as artifacts.
 
 ## Results against the live demo
 
-Last full run: **111 passed, 27 failed — all 27 are `@defect` tests, failing for the stated reason.**
-The regression set (`--grep-invert @defect`) passed 111/111 on two consecutive runs.
+Final runs on the last commit: **111 passed, 27 failed. All 27 are `@defect` tests, each failing for
+its stated reason, and no `@defect` test passed.** A second full run had the same API results, but 9
+admin UI tests failed during a window when the demo's admin side stopped working for any login (even
+a fresh one through the form). Re-running the UI project straight after gave 19 passed and 0
+unexpected failures.
 
 ### Defects found
 
@@ -193,6 +200,11 @@ The regression set (`--grep-invert @defect`) passed 111/111 on two consecutive r
 - React hydration error #418 on page load.
 
 ### Notes and limitations
+
+- **The demo is unstable under test.** I saw services resetting independently mid-run (room ids
+  recycled while old bookings survived) and a temporary outage of the admin side. The suite isolates
+  its data against the first. The second is out of a test's control, and it's the main argument for
+  running against an environment we own (see next steps).
 
 - **The reservation page's form locators are unverified**: the page never rendered while I wrote
   them (defect 2). They follow the platform's placeholders and must be checked once it loads.
