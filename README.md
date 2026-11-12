@@ -149,8 +149,8 @@ checks run on the test's own data.
   passing.
 - Static checks: TypeScript `strict`, ESLint (`typescript-eslint`, `eslint-plugin-playwright`,
   no floating promises), Prettier. Specs and page objects were also scanned with
-  [lootfilter](https://github.com/rafaellabarrocas/lootfilter), my test-code linter (see the
-  results below).
+  [lootfilter](https://github.com/rafaellabarrocas/lootfilter), my test-code linter: 0 violations (see
+  the notes below).
 
 ### CI (`.github/workflows/e2e.yml`)
 
@@ -212,10 +212,10 @@ unexpected failures.
   them (defect 2). They follow the platform's placeholders and must be checked once it loads.
 - **Test data cannot be cleaned up right now**, because `DELETE` is broken (defect 1). Each leftover
   is reported per test, and the demo's periodic reset removes them.
-- **lootfilter** reports no violations except one rule. ASSERT-001 flags 56 tests as having no
-  assertion. It's a false positive: its regex ends the test body at the first `})`, so any test that
-  destructures fixtures (`async ({ page }) => { … }`) is flagged. A one-line canonical Playwright
-  test reproduces it, and ESLint's `playwright/expect-expect` (set to error) passes on every spec. The fix belongs in lootfilter, not here.
+- **lootfilter**: specs and page objects scan at 100% compliance with 0 violations (2 suppressed:
+  the two justified CSS locators). That result needs a lootfilter fix I made along the way. Its
+  ASSERT-001 rule ran as a one-line pattern, so it flagged every test that destructures fixtures
+  (`async ({ page }) => {`) even when the test asserts. The rule now brace-matches each test body.
 
 ## What I would do next
 
