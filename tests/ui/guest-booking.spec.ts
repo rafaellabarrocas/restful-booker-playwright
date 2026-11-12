@@ -22,42 +22,44 @@ test.describe("UI · Guest booking", () => {
     await data.cleanup(testInfo);
   });
 
-  test(
-    "offers a newly added room to guests on the home page",
-    {
-      tag: "@defect",
-      annotation: { type: "defect", description: "The home page renders only the first 3 rooms" },
-    },
-    async ({ homePage }) => {
-      await homePage.open();
-
-      await expect(homePage.roomOnOffer(room.description ?? room.roomName)).toBeVisible();
-    },
-  );
-
-  test(
-    "lets a guest book a room and records the booking",
-    {
-      tag: ["@smoke", "@defect"],
-      annotation: {
-        type: "defect",
-        description: "Reservation page never loads: GET /room/:id → 500",
+  test.describe("happy path", () => {
+    test(
+      "offers a newly added room to guests on the home page",
+      {
+        tag: "@defect",
+        annotation: { type: "defect", description: "The home page renders only the first 3 rooms" },
       },
-    },
-    async ({ reservationPage }) => {
-      const booking = data.booking(room.roomid, { bookingdates: stay(45, 2) });
+      async ({ homePage }) => {
+        await homePage.open();
 
-      await reservationPage.open(room.roomid, booking.bookingdates);
-      await reservationPage.reserve(booking);
+        await expect(homePage.roomOnOffer(room.description ?? room.roomName)).toBeVisible();
+      },
+    );
 
-      await expect(reservationPage.confirmationHeading).toBeVisible();
-      expect(await data.bookingsForRoom(room.roomid)).toEqual([
-        expect.objectContaining({
-          firstname: booking.firstname,
-          lastname: booking.lastname,
-          bookingdates: booking.bookingdates,
-        }),
-      ]);
-    },
-  );
+    test(
+      "lets a guest book a room and records the booking",
+      {
+        tag: ["@smoke", "@defect"],
+        annotation: {
+          type: "defect",
+          description: "Reservation page never loads: GET /room/:id → 500",
+        },
+      },
+      async ({ reservationPage }) => {
+        const booking = data.booking(room.roomid, { bookingdates: stay(45, 2) });
+
+        await reservationPage.open(room.roomid, booking.bookingdates);
+        await reservationPage.reserve(booking);
+
+        await expect(reservationPage.confirmationHeading).toBeVisible();
+        expect(await data.bookingsForRoom(room.roomid)).toEqual([
+          expect.objectContaining({
+            firstname: booking.firstname,
+            lastname: booking.lastname,
+            bookingdates: booking.bookingdates,
+          }),
+        ]);
+      },
+    );
+  });
 });
