@@ -1,7 +1,10 @@
-# Restful Booker Platform — Cypress test suite
+# Restful Booker Platform — automated test suite
 
-The start of an automated test suite for [Restful Booker Platform](https://automationintesting.online),
-a demo hotel booking site. Written in Cypress + TypeScript.
+API and UI tests for [Restful Booker Platform](https://automationintesting.online), a demo hotel
+booking site. Playwright + TypeScript.
+
+> The suite started in Cypress (the brief's stack) and was moved to Playwright partway through. The
+> commit history shows both.
 
 ## Running the tests
 
@@ -9,134 +12,214 @@ Requirements: Node.js 20.12+.
 
 ```bash
 npm ci
+npx playwright install chromium
 
-# Admin credentials come from the environment, never from a committed file.
-# Copy the template and fill in the demo credentials from the exercise brief.
-# (.env is gitignored; exported shell variables work too.)
-cp .env.example .env
+cp .env.example .env   # then fill in the admin credentials from the exercise brief
 
-npm test              # whole suite, headless
-npm run test:smoke    # only the @smoke tests (the PR gate)
-npm run test:api      # API specs only
-npm run test:ui       # UI specs only
-npm run cy:open       # interactive runner
+npm test                 # everything: API + UI
+npm run test:api         # API only (no browser)
+npm run test:ui          # UI only
+npm run test:smoke       # @smoke: the critical paths
+npm run test:regression  # everything except @defect: the CI gate, expected green
+npm run test:defects     # only tests documenting known product defects: expected red
+npm run report           # open the last HTML report (traces, screenshots, videos)
 
-npm run check         # formatting, lint and type-check
+npm run check            # formatting, lint, type-check
 ```
 
-`BASE_URL` points the suite at another environment (default: `https://automationintesting.online`).
+### Environments
 
-To pick a browser, add `-- --browser chrome` (or `chromium`, `firefox`).
+Nothing environment-specific lives in code. Settings resolve in this order (first wins):
 
-## What is covered, and why
+1. real environment variables (CI secrets, shell exports);
+2. `.env` — local and gitignored: credentials and `TEST_ENV`;
+3. `config/environments/<TEST_ENV>.env` — committed, non-secret: `BASE_URL` and `API_BASE_URL`.
 
-I tested the paths where a failure costs the hotel money or trust first, at the lowest layer that can
-prove each one:
+`TEST_ENV` defaults to `demo`. To target another environment (a local Docker stack, staging), add
+`config/environments/<name>.env` and run with `TEST_ENV=<name>`. The UI and API base URLs are set
+separately, so an API on another host or path works too. A missing setting fails at start-up with a
+message naming the variable and where to set it.
 
-| Area                   | Layer    | Tests                                                                                                                                                                     |
-| ---------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Booking rules          | API      | a guest can book; **no double booking** on overlapping dates; back-to-back stays allowed; inverted dates rejected; invalid guest details rejected with a reason per field |
-| Guest booking journey  | UI       | a room added by the admin is offered on the home page; a guest books it through the reservation page and the booking is recorded                                          |
-| Guest → hotel messages | API + UI | message is confirmed to the guest, delivered to the admin inbox and shown in the admin panel; incomplete messages explained field by field                                |
-| Admin access           | API + UI | valid login/logout; wrong password refused; admin endpoints refuse anonymous calls                                                                                        |
-| Room management        | API + UI | room created by the admin (via API and via the panel) is published with the right type, price, accessibility and features                                                 |
+## What is covered
 
-21 tests: 12 API, 9 UI. 9 are tagged `@smoke`.
+137 tests (plus one setup step), grouped in every spec by scenario type. The groups show up in the
+report: `API · Bookings › edge cases › refuses a firstname of 19 characters`.
 
-## How the suite is built
+| Area                       |  Happy | Alternative | Negative |   Edge | Corner | Exceptions |   Total |
+| -------------------------- | -----: | ----------: | -------: | -----: | -----: | ---------: | ------: |
+| API · Authentication       |      3 |           – |        4 |      – |      1 |          2 |      10 |
+| API · Room availability    |      2 |           1 |        – |      6 |      – |          1 |      10 |
+| API · Bookings             |      5 |           4 |       12 |     14 |      4 |          2 |      41 |
+| API · Branding             |      1 |           – |        1 |      – |      – |          – |       2 |
+| API · Booking report       |      2 |           – |        1 |      – |      – |          – |       3 |
+| API · Guest messages       |      5 |           – |        2 |     12 |      2 |          1 |      22 |
+| API · Rooms                |      5 |           8 |        3 |      5 |      4 |          2 |      27 |
+| UI · Admin login           |      2 |           – |        2 |      – |      1 |          – |       5 |
+| UI · Admin messages inbox  |      2 |           – |        – |      – |      1 |          – |       3 |
+| UI · Admin room management |      2 |           1 |        2 |      2 |      – |          – |       7 |
+| UI · Guest booking         |      2 |           – |        – |      – |      – |          – |       2 |
+| UI · Guest contact form    |      1 |           – |        2 |      1 |      1 |          – |       5 |
+| **Total**                  | **32** |      **14** |   **29** | **40** | **14** |      **8** | **137** |
+
+- **Happy path:** the main flow works end to end. For example, a guest books a room, gets a 201
+  with the booking echoed back, and the booking is stored against the room.
+- **Alternative flows:** other valid ways through, such as each room type, deposit paid or not,
+  back-to-back stays, or a room with no features.
+- **Negative:** invalid input refused with the right status and message, and nothing persisted.
+  This includes double bookings (five overlap shapes), missing fields, bad emails and missing auth.
+- **Edge cases:** each field limit tested on both sides of the boundary (name, phone, subject,
+  message length, price 1–999), one-night stays, leap days, and availability at the exact edges of a
+  booking.
+- **Corner cases:** unusual combinations, such as unicode names, markup in messages (stored as text
+  and never executed in the admin inbox), past dates, rooms that don't exist, fractional prices,
+  token reuse after logout, and responses leaking a guest's email or phone.
+- **Exceptions:** malformed JSON, wrong types, forged tokens, unparseable dates. The server should
+  answer 4xx, not crash.
+
+**Split between layers.** Business rules are checked at the API, where they are fast and precise.
+The UI covers each user journey once, plus what only the UI can show: validation feedback, session
+handling, and how user content is rendered.
+
+### What an API test checks
+
+Every API test checks more than the status code:
+
+- **status and content type**: `await expect(response).toBeJson(201)`;
+- **contract**: `await expect(response).toMatchSchema(BookingSchema)`. The zod schemas in
+  `src/api/schemas.ts` are strict, so an unexpected field fails, for example a guest's email leaking
+  into a booking response;
+- **values**: the response echoes what was sent (`toEqual` on the whole body where possible);
+- **side effects**: after a write, the state is read back. A refused write is checked to have
+  stored nothing.
+
+## How it is built
 
 ```
-cypress/
-  e2e/
-    api/          # contract and business-rule tests, no browser
-    ui/           # user journeys
-  support/
-    api/          # one typed client per resource (auth, rooms, bookings, messages)
-    data/         # factories, per-test tag, cleanup
-    pages/        # page objects: locate and act, never assert
-    commands.ts   # cy.loginAsAdmin() — API login cached with cy.session
-    e2e.ts        # global hooks
-  plugins/        # Node side: end-of-run cleanup report
+config/environments/   per-environment, non-secret settings (demo.env)
+src/
+  config/              env.ts: the only place that reads process.env
+  api/                 schemas.ts (zod contracts + types), clients.ts (one client per resource)
+  data/                factories.ts (valid payloads, limits), test-data.ts (setup + cleanup)
+  fixtures/            test + expect: API fixtures, page objects, custom matchers
+  pages/               page objects: locators and actions, never assertions
+tests/
+  setup/               admin session for the UI, created through the API
+  api/                 API specs
+  ui/                  UI specs
 ```
 
-**Test data through the API, before every test, cleaned up after.** UI tests never build their own
-preconditions through the UI. A booking test creates its own room through the API, so it never
-depends on what other people have booked on the shared environment.
+**Test data is created through the API in `beforeAll`/`beforeEach` and deleted through the API in
+`afterAll`/`afterEach`.** Shared, read-only data (for example the booked room behind the
+availability tests) is created once per file in `beforeAll`. Anything a test changes is created per
+test in `beforeEach`.
 
-**A unique tag per test.** Every test gets a short random tag (`qa3k9xz`) that goes into every name
-it creates: room name, guest name, message subject. That gives two things on a shared, resettable
-environment:
+**A unique tag per data scope** (`qa3k9xz`) goes into every name the scope creates. On a shared,
+resettable environment this means:
 
-- a test only looks for its own data, so other users cannot break it;
-- cleanup finds everything the test created by its tag — including data created _through the UI_,
-  whose ids the test never sees, and the "You have a new booking!" message the platform generates
-  for each booking.
+- a test only looks for its own data, so other users cannot break it, and tests can run in parallel;
+- cleanup finds everything by tag, including data created through the UI (whose ids the test never
+  sees) and the "You have a new booking!" message the platform generates for each booking.
 
-**Cleanup never hides a result.** A global `afterEach` deletes the test's tagged data (bookings,
-rooms, messages), whether the test passed or failed. A failed delete does not fail the test; it is
-collected and printed at the end of the run so leftovers are visible.
+**Cleanup never hides a result.** A failed delete doesn't fail the test. It is recorded as a
+`cleanup-failed` annotation in the report and printed as a warning.
+
+**Lookups are tolerant, assertions are strict.** Setup and cleanup only read the identifying fields
+of the shared lists, so one malformed record left by someone else can't break them. Strict contract
+checks run on the test's own data.
 
 **Other choices**
 
-- Admin UI tests log in through the API (`cy.session`); only the login spec drives the login form.
-- Credentials are read with `cy.env()` from environment variables (`ADMIN_USERNAME`, `ADMIN_PASSWORD`),
-  loaded from a gitignored `.env` locally and never committed. In CI they come from repository secrets.
-- No fixed waits: everything relies on Cypress retry-ability and assertions.
-- Only one uncaught application error is ignored: React hydration error #418, which the live site
-  throws on every page load (see findings). Any other uncaught error still fails the test.
-- Retries are on in CI (1) and off locally, so flakiness is seen where it is fixed.
-- Static checks: TypeScript `strict`, ESLint (`typescript-eslint` + `eslint-plugin-cypress`), Prettier.
-  The suite was also scanned with [lootfilter](https://github.com/rafaellabarrocas/lootfilter), my
-  test-code linter: 23 files, 0 violations.
-- CI (`.github/workflows/e2e.yml`): static checks, then smoke tests on every pull request and the full
-  suite on `main` and nightly; screenshots and videos are uploaded when a run fails.
+- Specs import `test`/`expect` from `src/fixtures`. API clients are worker-scoped fixtures
+  (`anonApi`, `adminApi`), so they can be used in `beforeAll`/`afterAll`.
+- Admin UI tests start from a session created through the API (setup project + `storageState`).
+  Only the login spec drives the login form.
+- Locators: role, label and text first; `data-testid` only where the app gives nothing else; CSS
+  twice, each justified in a comment (the room form has unlabelled fields).
+- No retries and no fixed waits. A test that only passes on retry is a bug.
+- Traces, screenshots and videos are kept on failure. CI also writes JUnit.
+- Known product defects are tests tagged `@defect` with an annotation describing the defect. They
+  fail for the stated reason and are left failing, never skipped or weakened. CI keeps them out of the
+  gate and re-runs them in a non-blocking job, so a fix shows up as a defect test that starts
+  passing.
+- Static checks: TypeScript `strict`, ESLint (`typescript-eslint`, `eslint-plugin-playwright`,
+  no floating promises), Prettier. Specs and page objects were also scanned with
+  [lootfilter](https://github.com/rafaellabarrocas/lootfilter), my test-code linter (see the
+  results below).
 
-## Current results and findings
+### CI (`.github/workflows/e2e.yml`)
 
-Last full run against the live site: **19 passed, 2 failed.** Both failures are product defects, not
-test problems; the tests are left failing on purpose.
+| Trigger      | Runs                                                             |
+| ------------ | ---------------------------------------------------------------- |
+| pull request | static checks → `@smoke` (without `@defect`)                     |
+| `main`       | static checks → regression (gate) + known defects (non-blocking) |
+| nightly      | same as `main`                                                   |
+| manual       | same, with a choice of `TEST_ENV`                                |
 
-1. **Guests cannot book a room — the reservation page never loads.** `/reservation/:id` stays on a
-   spinner because `GET /api/room/:id` returns HTTP 500. Every endpoint with an id in the path
-   returns 500 (`GET /api/room/1`, `GET /api/booking/1`, `GET /api/message/1`, all `DELETE`s), so
-   this looks like a routing/proxy problem in front of the API rather than in one service.
-   → fails `UI · Guest booking › lets a guest book a room and records the booking`.
-   Because the page never rendered, the locators of the reservation form
-   (`support/pages/reservation.page.ts`) could not be checked against the real DOM.
-2. **A room added by the admin is never offered to guests.** The home page loads every room from
-   `GET /api/room` but only renders the first three cards. Any room beyond the seed data is invisible
-   on the public site. → fails `UI · Guest booking › offers a newly added room to guests on the home page`.
-3. **Cleanup is currently impossible.** Because of (1), every `DELETE` returns 500, so test data
-   cannot be removed right now. The suite reports each leftover at the end of the run. The
-   environment's periodic reset removes them.
-4. **React hydration error #418 on every page.** Server and client renders differ. It does not break
-   a flow today, but it hides real client errors and costs performance.
-5. **Open question — guest messages are readable without logging in.** `GET /api/message` returns
-   guests' names and message subjects to anonymous callers, while bookings and reports require a
-   token. I did not encode this as a test because I could not confirm whether it is intended.
+Reports, traces and videos are uploaded as artifacts.
+
+## Results against the live demo
+
+Last full run: **111 passed, 27 failed — all 27 are `@defect` tests, failing for the stated reason.**
+The regression set (`--grep-invert @defect`) passed 111/111 on two consecutive runs.
+
+### Defects found
+
+| #   | Defect                                                                                                                      | Severity                | Tests                       |
+| --- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------- | --------------------------- |
+| 1   | **Every API route with an id returns 500** (`GET/PUT/DELETE /room/:id`, `/booking/:id`, `/message/:id`, `/report/room/:id`) | Critical                | 8 API tests                 |
+| 2   | → so **guests cannot book**: the reservation page calls `GET /room/:id` and spins forever                                   | Critical                | UI · Guest booking          |
+| 3   | → and **admins cannot open, edit or delete** rooms, bookings or messages                                                    | High                    | UI · Admin messages inbox   |
+| 4   | **Availability search offers booked rooms** when the search only partly overlaps the booking or falls inside it             | High (overbooking risk) | API · Room availability (3) |
+| 5   | **Logout does not invalidate the token**: it still validates and can still create rooms                                     | High (security)         | API · Authentication        |
+| 6   | **Bookings accepted for dates in the past**                                                                                 | High                    | API · Bookings              |
+| 7   | **Bookings accepted for a room that does not exist** (orphan bookings)                                                      | High                    | API · Bookings              |
+| 8   | **A new room never appears on the home page**: it renders only the first three rooms                                        | High                    | UI · Guest booking          |
+| 9   | **Bad input crashes the server (500) instead of 4xx**: malformed JSON, forged token, unparseable date, 300-char room name   | Medium                  | 6                           |
+| 10  | **Silent data changes**: price 150.5 stored as 150; omitted `features` stored as `[null]`; unknown features accepted        | Medium                  | API · Rooms (3)             |
+| 11  | **Missing price gives a generic "Failed to create room"**, with no field reason, in the API and the admin form              | Low                     | UI · Admin room management  |
+
+**Also observed (no test, needs a product decision):**
+
+- `GET /message` lists guests' names and subjects to anonymous callers, while bookings and reports
+  need a token.
+- An inverted date range (checkout before checkin) in the availability search returns every room
+  instead of an error.
+- Error bodies are inconsistent: `{ errors: [...] }` for rooms and bookings, a bare array for
+  messages, and `{ error }` vs `{ errors }` for the same 401 on different endpoints.
+- Duplicate room names are accepted.
+- Accessibility: the contact form's message box and every field of the admin room form have no
+  accessible name.
+- The login page shows a "Logout" button to logged-out users.
+- React hydration error #418 on page load.
+
+### Notes and limitations
+
+- **The reservation page's form locators are unverified**: the page never rendered while I wrote
+  them (defect 2). They follow the platform's placeholders and must be checked once it loads.
+- **Test data cannot be cleaned up right now**, because `DELETE` is broken (defect 1). Each leftover
+  is reported per test, and the demo's periodic reset removes them.
+- **lootfilter** reports no violations except one rule. ASSERT-001 flags 56 tests as having no
+  assertion. It's a false positive: its regex ends the test body at the first `})`, so any test that
+  destructures fixtures (`async ({ page }) => { … }`) is flagged. A one-line canonical Playwright
+  test reproduces it, and ESLint's `playwright/expect-expect` (set to error) passes on every spec. The fix belongs in lootfilter, not here.
 
 ## What I would do next
 
-- **Confirm the two open product questions** (home page showing three rooms; anonymous access to
-  messages) and turn the answers into tests.
-- **Re-check the reservation page locators** as soon as `GET /api/room/:id` works again.
-- **Run against an environment we own** (the platform ships as Docker images). A private, resettable
-  environment makes cleanup trivial, removes the noise of other users, and lets the suite run in
-  parallel.
-- **Add a dedicated test for the 500s on id routes** as a health check, so this kind of outage is
-  reported as one clear failure instead of through the journeys it breaks.
-- **More coverage, in this order:** admin editing and deleting rooms and bookings; booking edge cases
-  (minimum stay, past dates, same-day checkin/checkout, max guests); branding/contact details; the admin
-  report calendar; accessibility checks (`cypress-axe`) on the guest pages; visual checks of the room
-  cards.
-- **Contract tests** for the API (JSON schema per endpoint) so breaking response changes fail fast.
-- **Reporting:** a JUnit/HTML report published from CI, and a flaky-test log built from CI retries.
-- **Parallel runs** in CI once the suite grows past a few minutes.
+- **Run against an environment we own.** The platform ships as Docker images, and a private,
+  resettable stack (`TEST_ENV=local`) makes cleanup trivial and removes other users' noise.
+- **Track each `@defect` in the team's issue tracker** and put the ticket id in the annotation.
+- **Add the journeys blocked by defect 1** once it is fixed: edit/delete in the admin UI, booking
+  cancellation, the admin booking calendar.
+- **Accessibility checks** (`@axe-core/playwright`) on guest pages, starting with the unlabelled fields.
+- **More browsers and a mobile viewport** as extra Playwright projects.
+- **Contract tests from an OpenAPI spec**, if the platform publishes one, instead of hand-written schemas.
+- **Performance smoke**: response-time budgets on the booking and availability endpoints.
 
 ## Time spent
 
-About 30 minutes of AI-assisted build time (exploring the app and its API, writing the suite,
-running it against the live site), plus my own review. The commit timestamps show the progression.
+By the clock (see commit times): the Cypress version took about 30 minutes; the Playwright rework,
+including re-probing the API for edge cases, about 50 minutes. Both were AI-assisted, plus my own
+review.
 
 ## AI usage
 

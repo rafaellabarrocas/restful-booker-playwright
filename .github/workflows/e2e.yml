@@ -5,52 +5,83 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "0 6 * * *" # nightly full regression
+    - cron: "0 6 * * *" # nightly
   workflow_dispatch:
+    inputs:
+      test_env:
+        description: Environment to test (a file in config/environments)
+        default: demo
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  TEST_ENV: ${{ inputs.test_env || 'demo' }}
+  ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+  ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+
 jobs:
   static-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run check
 
+  # The gate: everything except tests that document known product defects.
+  # Pull requests get the fast @smoke subset; main and nightly get the full regression set.
   tests:
     needs: static-checks
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
-      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Pull requests get fast feedback from the smoke set; main and nightly run everything.
-      - name: Smoke tests
+      - run: npx playwright install --with-deps chromium
+      - name: Smoke
         if: github.event_name == 'pull_request'
-        run: npm run test:smoke
-      - name: Full suite
+        run: npx playwright test --grep @smoke --grep-invert @defect
+      - name: Regression
         if: github.event_name != 'pull_request'
-        run: npm test
-      - name: Upload screenshots and videos
-        if: failure()
-        uses: actions/upload-artifact@v4
+        run: npm run test:regression
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
-          name: cypress-artifacts
+          name: playwright-report
           path: |
-            cypress/screenshots
-            cypress/videos
+            playwright-report
+            test-results
+          retention-days: 14
+
+  # Not a gate: re-checks the documented defects on main and nightly. A defect test
+  # that starts passing means a fix shipped and its @defect tag should be removed.
+  known-defects:
+    if: github.event_name != 'pull_request'
+    needs: static-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:defects
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: known-defects-report
+          path: playwright-report
           retention-days: 14

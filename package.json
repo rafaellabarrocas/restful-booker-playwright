@@ -1,5 +1,5 @@
 {
-  "name": "restful-booker-cypress",
+  "name": "restful-booker-tests",
   "version": "0.1.0",
   "private": true,
   "description": "Playwright test suite (API + UI) for Restful Booker Platform",
