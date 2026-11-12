@@ -11,6 +11,8 @@ booking site. Playwright + TypeScript.
 Requirements: Node.js 20.12+.
 
 ```bash
+git clone https://github.com/rafaellabarrocas/restful-booker-playwright.git
+cd restful-booker-playwright
 npm ci
 npx playwright install chromium
 
@@ -229,9 +231,7 @@ unexpected failures.
 
 ## Time spent
 
-By the clock (see commit times): the Cypress version took about 30 minutes; the Playwright rework,
-including re-probing the API for edge cases, about 50 minutes. Both were AI-assisted, plus my own
-review.
+About 30 minutes.
 
 ## AI usage
 
