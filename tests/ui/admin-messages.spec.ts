@@ -30,40 +30,47 @@ test.describe("UI · Admin messages inbox", () => {
     await data.cleanup(testInfo);
   });
 
-  test(
-    "shows a guest's message with its sender and subject",
-    { tag: "@smoke" },
-    async ({ adminMessagesPage }) => {
-      await expect(adminMessagesPage.messageRow(message.name)).toContainText(message.subject);
-    },
-  );
-
-  test("shows markup sent by a guest as text, without rendering it", async ({
-    page,
-    adminMessagesPage,
-  }) => {
-    const dialogs: string[] = [];
-    page.on("dialog", (dialog) => {
-      dialogs.push(dialog.message());
-      void dialog.dismiss();
-    });
-
-    await expect(adminMessagesPage.messageRow(markupMessage.name)).toContainText(
-      markupMessage.subject,
+  test.describe("happy path", () => {
+    test(
+      "shows a guest's message with its sender and subject",
+      { tag: "@smoke" },
+      async ({ adminMessagesPage }) => {
+        await expect(adminMessagesPage.messageRow(message.name)).toContainText(message.subject);
+      },
     );
-    expect(dialogs).toEqual([]);
+
+    test(
+      "opens a message to read it in full",
+      {
+        tag: "@defect",
+        annotation: {
+          type: "defect",
+          description: "Opening a message calls GET /message/:id → 500",
+        },
+      },
+      async ({ adminMessagesPage }) => {
+        await adminMessagesPage.openMessage(message.name);
+
+        await expect(adminMessagesPage.textOnPage(message.description)).toBeVisible();
+      },
+    );
   });
 
-  test(
-    "opens a message to read it in full",
-    {
-      tag: "@defect",
-      annotation: { type: "defect", description: "Opening a message calls GET /message/:id → 500" },
-    },
-    async ({ adminMessagesPage }) => {
-      await adminMessagesPage.openMessage(message.name);
+  test.describe("corner cases", () => {
+    test("shows markup sent by a guest as text, without running it", async ({
+      page,
+      adminMessagesPage,
+    }) => {
+      const dialogs: string[] = [];
+      page.on("dialog", (dialog) => {
+        dialogs.push(dialog.message());
+        void dialog.dismiss();
+      });
 
-      await expect(adminMessagesPage.textOnPage(message.description)).toBeVisible();
-    },
-  );
+      await expect(adminMessagesPage.messageRow(markupMessage.name)).toContainText(
+        markupMessage.subject,
+      );
+      expect(dialogs).toEqual([]);
+    });
+  });
 });
